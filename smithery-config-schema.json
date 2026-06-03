@@ -1,0 +1,12 @@
+{
+  "type": "object",
+  "required": ["apiKey"],
+  "properties": {
+    "apiKey": {
+      "type": "string",
+      "title": "PainSpotter API Key",
+      "description": "psk_live_... create at https://painspotter.ai/account. Free tier: get_overview & get_opportunity. Pro unlocks all tools.",
+      "x-from": { "header": "x-api-key" }
+    }
+  }
+}

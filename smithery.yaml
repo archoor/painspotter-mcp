@@ -1,0 +1,24 @@
+# Smithery 发布清单（远程 / URL 模式）。
+# PainSpotter 自托管，Smithery Gateway 反代到下方公网 HTTPS 端点。
+# 发布步骤见 docs/mcp-setup-20260509.md「上架公开平台」一节。
+runtime: remote
+
+remote:
+  url: https://painspotter.ai/mcp
+  transport: streamable-http
+
+# 用户在 Smithery 连接时需提供的配置（注入为 X-API-Key header）
+startCommand:
+  type: http
+  configSchema:
+    type: object
+    required:
+      - apiKey
+    properties:
+      apiKey:
+        type: string
+        title: PainSpotter API Key
+        description: "psk_live_... 从 https://painspotter.ai/account 创建。免费仅 get_overview/get_opportunity，Pro 解锁全部。"
+  # 把 apiKey 映射到请求头 X-API-Key
+  headers:
+    X-API-Key: "{{apiKey}}"
