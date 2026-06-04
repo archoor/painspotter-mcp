@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Syntax check
+        run: python -m py_compile painspotter_mcp.py
+
+      - name: Install package
+        run: pip install .
+
+      - name: Verify import and tool registration
+        run: |
+          python - <<'PY'
+          import asyncio
+          import painspotter_mcp as m
+
+          tools = asyncio.run(m.mcp.get_tools())
+          names = sorted(tools.keys())
+          print("Registered tools:", names)
+
+          expected = {"query_opportunities", "get_opportunity"}
+          assert expected.issubset(set(names)), f"missing tools: {expected - set(names)}"
+          print("OK: all expected tools registered")
+          PY
+
+      - name: Verify console entry point exists
+        run: |
+          python -c "import importlib.metadata as md; eps = md.entry_points(group='console_scripts'); assert any(e.name == 'painspotter-mcp' for e in eps), 'entry point missing'; print('OK: painspotter-mcp entry point present')"
