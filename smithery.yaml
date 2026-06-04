@@ -4,7 +4,7 @@
 runtime: remote
 
 remote:
-  url: https://painspotter.ai/mcp
+  url: https://painspotter.ai/mcp/
   transport: streamable-http
 
 # 用户在 Smithery 连接时需提供的配置（注入为 X-API-Key header）

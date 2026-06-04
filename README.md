@@ -16,7 +16,7 @@ Claude / Cursor (`~/.cursor/mcp.json` or Claude connectors):
 {
   "mcpServers": {
     "painspotter": {
-      "url": "https://painspotter.ai/mcp",
+      "url": "https://painspotter.ai/mcp/",
       "headers": { "X-API-Key": "psk_live_your_key" }
     }
   }

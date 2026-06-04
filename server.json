@@ -11,7 +11,7 @@
   "remotes": [
     {
       "type": "streamable-http",
-      "url": "https://painspotter.ai/mcp",
+      "url": "https://painspotter.ai/mcp/",
       "headers": [
         {
           "name": "X-API-Key",

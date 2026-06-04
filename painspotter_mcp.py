@@ -1,24 +1,28 @@
 """
-PainSpotter MCP Server
+PainSpotter MCP Server (local stdio)
 
-让 Claude / Cursor 用户直接在 IDE 里查询 PainSpotter 商机数据。
+Lets Claude / Cursor users query PainSpotter business opportunities from their IDE.
 
-环境变量（必填）：
-  PAINSPOTTER_API_KEY   — 在 painspotter.ai → Account → API Key 获取
-  PAINSPOTTER_API_BASE  — 默认 https://painspotter.ai（自部署时改此值）
+This local stdio package talks to the public PainSpotter v1 REST API and exposes
+the opportunity-level tools only. It is a strict subset of the hosted endpoint at
+https://painspotter.ai/mcp — both tool names documented here also exist there.
+For the full layered tool set (get_overview, list_trending_themes, get_theme),
+use the hosted endpoint. See README.md.
 
-工具列表（4 个）：
-  list_opportunities    — 按评分/平台/推荐等级列出商机
-  search_opportunities  — 关键词全文搜索商机
-  get_opportunity       — 获取单个商机完整详情
-  get_top_opportunities — 快速获取 Top N 商机
+Environment variables:
+  PAINSPOTTER_API_KEY   — create one at https://painspotter.ai/account (required)
+  PAINSPOTTER_API_BASE  — defaults to https://painspotter.ai (override for self-host)
 
-快速配置（Claude Desktop ~/.cursor/mcp.json）：
+Tools (2):
+  query_opportunities — filter opportunities by keyword, score, platform, recommendation
+  get_opportunity     — full detail of one opportunity
+
+Quick config (~/.cursor/mcp.json or Claude Desktop):
   {
     "mcpServers": {
       "painspotter": {
-        "command": "python",
-        "args": ["/path/to/painspotter_mcp.py"],
+        "command": "uvx",
+        "args": ["painspotter-mcp"],
         "env": {
           "PAINSPOTTER_API_KEY": "psk_live_...",
           "PAINSPOTTER_API_BASE": "https://painspotter.ai"
@@ -45,10 +49,13 @@ API_KEY = os.environ.get("PAINSPOTTER_API_KEY", "")
 mcp = FastMCP(
     "PainSpotter",
     instructions=(
-        "You have access to PainSpotter's business opportunity database. "
-        "These are AI-analyzed opportunities discovered from Reddit, HackerNews, and ProductHunt discussions. "
-        "Each opportunity includes a pain point, target audience, monetization model, and commercial scores. "
-        "Use these tools to help users discover, evaluate, and compare business ideas."
+        "PainSpotter is a database of AI-analyzed business opportunities mined from "
+        "Reddit, Hacker News and Product Hunt discussions. Each opportunity is a concrete "
+        "product idea carrying a pain point, target audience, monetization model and commercial scores.\n\n"
+        "This local server exposes the opportunity-level tools: use query_opportunities to "
+        "search and filter, then get_opportunity for the full detail of a specific result. "
+        "For category overviews and trending themes, use the hosted endpoint at "
+        "https://painspotter.ai/mcp."
     ),
 )
 
@@ -129,107 +136,40 @@ def _fmt_detail(o: dict) -> str:
 
 # ── MCP 工具 ───────────────────────────────────────────────────────────────────
 
-@mcp.tool()
-def list_opportunities(
+@mcp.tool(
+    annotations={
+        "title": "Query Opportunities",
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": True,
+    }
+)
+def query_opportunities(
+    query: Optional[str] = None,
     min_score: int = 0,
     platform: Optional[str] = None,
     recommendation: Optional[str] = None,
     page_size: int = 10,
 ) -> str:
-    """
-    列出 PainSpotter 商机，按综合评分从高到低排序。
+    """Search PainSpotter opportunities: filter by keyword, minimum score, platform
+    and recommendation tier. Results are sorted by overall score, highest first.
 
     Args:
-        min_score: 最低综合评分（0-100，默认 0）
-        platform: 平台筛选，可选 reddit / producthunt（留空=全部）
-        recommendation: 推荐等级筛选，可选 Build / Validate / Skip（留空=全部）
-        page_size: 返回条数（1-50，默认 10）
+        query: Keyword matched against title + description, e.g. "sleep tracker",
+            "AI writing". Empty = no keyword filter.
+        min_score: Minimum overall score, 0-100. Default 0.
+        platform: Platform filter: reddit / hackernews / producthunt. Empty = all.
+        recommendation: Recommendation tier: Build / Validate / Skip. Empty = all.
+        page_size: Number of results to return, 1-30. Default 10.
     """
     params: dict = {
-        "min_score": min_score,
-        "page_size": min(max(page_size, 1), 50),
-        "online_only": True,
-    }
-    if platform:
-        params["platform"] = platform
-    if recommendation and recommendation in ("Build", "Validate", "Skip"):
-        params["recommendation"] = recommendation
-
-    data = _get("/opportunities", params)
-    items = data.get("items", [])
-    total = data.get("total", 0)
-
-    if not items:
-        return "没有找到符合条件的商机。尝试降低 min_score 或去掉筛选条件。"
-
-    header = f"共 {total} 个商机，显示前 {len(items)} 条（按评分排序）：\n"
-    rows = "\n\n".join(_fmt_item(o) for o in items)
-    return header + rows
-
-
-@mcp.tool()
-def search_opportunities(
-    query: str,
-    min_score: int = 0,
-    page_size: int = 10,
-) -> str:
-    """
-    按关键词搜索商机（匹配标题和描述）。
-
-    Args:
-        query: 搜索关键词，如 "sleep tracker" "AI writing" "freelancer"
-        min_score: 最低综合评分（0-100，默认 0）
-        page_size: 返回条数（1-30，默认 10）
-    """
-    params = {
-        "q": query.strip(),
         "min_score": min_score,
         "page_size": min(max(page_size, 1), 30),
         "online_only": True,
     }
-    data = _get("/opportunities", params)
-    items = data.get("items", [])
-    total = data.get("total", 0)
-
-    if not items:
-        return f'关键词 "{query}" 没有匹配结果。建议换用更通用的词，或拆分为单词搜索。'
-
-    header = f'关键词 "{query}" 命中 {total} 条，显示前 {len(items)} 条：\n'
-    rows = "\n\n".join(_fmt_item(o) for o in items)
-    return header + rows
-
-
-@mcp.tool()
-def get_opportunity(opportunity_id: int) -> str:
-    """
-    获取指定商机的完整详情，包含描述、MVP 功能、竞争对手、风险点和社区证据数。
-
-    Args:
-        opportunity_id: 商机 ID（从 list_opportunities 或 search_opportunities 的结果中获取）
-    """
-    data = _get(f"/opportunities/{opportunity_id}")
-    return _fmt_detail(data)
-
-
-@mcp.tool()
-def get_top_opportunities(
-    limit: int = 5,
-    platform: Optional[str] = None,
-    recommendation: Optional[str] = None,
-) -> str:
-    """
-    快速获取评分最高的商机（适合"给我看看最好的机会"类问题）。
-
-    Args:
-        limit: 返回条数（1-20，默认 5）
-        platform: 平台筛选，可选 reddit / producthunt（留空=全部）
-        recommendation: 推荐等级，可选 Build / Validate / Skip（只看 Build 推荐则填 Build）
-    """
-    params: dict = {
-        "min_score": 60,
-        "page_size": min(max(limit, 1), 20),
-        "online_only": True,
-    }
+    if query and query.strip():
+        params["q"] = query.strip()
     if platform:
         params["platform"] = platform
     if recommendation and recommendation in ("Build", "Validate", "Skip"):
@@ -237,14 +177,35 @@ def get_top_opportunities(
 
     data = _get("/opportunities", params)
     items = data.get("items", [])
+    total = data.get("total", 0)
 
     if not items:
-        return "暂时没有符合条件的高评分商机（评分≥60）。"
+        return "No opportunities matched. Try lowering min_score or removing filters."
 
-    header = f"Top {len(items)} 商机（评分≥60，按评分排序）：\n"
+    header = f"{total} matching opportunities, showing top {len(items)} (sorted by score):\n"
     rows = "\n\n".join(_fmt_item(o) for o in items)
-    footer = "\n\n使用 get_opportunity(id) 获取任意商机的完整详情。"
+    footer = "\n\nUse get_opportunity(opportunity_id) for the full detail of any result."
     return header + rows + footer
+
+
+@mcp.tool(
+    annotations={
+        "title": "Get Opportunity Detail",
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": True,
+    }
+)
+def get_opportunity(opportunity_id: int) -> str:
+    """Get the full detail of a specific opportunity: description, score breakdown,
+    MVP features, competitors, differentiation, risks and community evidence count.
+
+    Args:
+        opportunity_id: Opportunity ID, taken from query_opportunities results.
+    """
+    data = _get(f"/opportunities/{opportunity_id}")
+    return _fmt_detail(data)
 
 
 # ── 入口 ──────────────────────────────────────────────────────────────────────
