@@ -18,7 +18,7 @@ startCommand:
       apiKey:
         type: string
         title: PainSpotter API Key
-        description: "psk_live_... 从 https://painspotter.ai/account 创建。免费仅 get_overview/get_opportunity，Pro 解锁全部。"
+        description: "psk_live_... 从 https://painspotter.ai/account 创建。免费：get_overview/get_opportunity/list_blog_posts/get_blog_post；Pro 解锁全部。"
   # 把 apiKey 映射到请求头 X-API-Key
   headers:
     X-API-Key: "{{apiKey}}"

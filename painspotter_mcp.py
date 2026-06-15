@@ -4,18 +4,19 @@ PainSpotter MCP Server (local stdio)
 Lets Claude / Cursor users query PainSpotter business opportunities from their IDE.
 
 This local stdio package talks to the public PainSpotter v1 REST API and exposes
-the opportunity-level tools only. It is a strict subset of the hosted endpoint at
-https://painspotter.ai/mcp — both tool names documented here also exist there.
-For the full layered tool set (get_overview, list_trending_themes, get_theme),
-use the hosted endpoint. See README.md.
+the opportunity-level tools plus free blog tools. It is a subset of the hosted endpoint at
+https://painspotter.ai/mcp — the hosted server has 7 tools (adds get_overview,
+list_trending_themes, get_theme). See README.md.
 
 Environment variables:
   PAINSPOTTER_API_KEY   — create one at https://painspotter.ai/account (required)
   PAINSPOTTER_API_BASE  — defaults to https://painspotter.ai (override for self-host)
 
-Tools (2):
+Tools (4):
   query_opportunities — filter opportunities by keyword, score, platform, recommendation
   get_opportunity     — full detail of one opportunity
+  list_blog_posts     — recent published blog analyses (free, no API key needed)
+  get_blog_post       — full Markdown of one blog article (free, no API key needed)
 
 Quick config (~/.cursor/mcp.json or Claude Desktop):
   {
@@ -54,6 +55,8 @@ mcp = FastMCP(
         "product idea carrying a pain point, target audience, monetization model and commercial scores.\n\n"
         "This local server exposes the opportunity-level tools: use query_opportunities to "
         "search and filter, then get_opportunity for the full detail of a specific result. "
+        "It also exposes the free blog: list_blog_posts / get_blog_post return weekly "
+        "long-form opportunity analyses (no API key needed). "
         "For category overviews and trending themes, use the hosted endpoint at "
         "https://painspotter.ai/mcp."
     ),
@@ -79,6 +82,17 @@ def _get(path: str, params: Optional[dict] = None) -> dict:
             f"API 配额已用完（{data.get('current', '?')}/{data.get('limit', '?')}次）。"
             f"下次重置：{data.get('reset_at', '—')}。"
         )
+    resp.raise_for_status()
+    return resp.json()
+
+
+def _get_public(path: str, params: Optional[dict] = None) -> dict:
+    """向 PainSpotter 公开 API 发 GET（无需 API key）。
+
+    Blog 是免费、面向引用的内容表面，不计入配额、不需密钥。
+    """
+    url = f"{API_BASE}{path}"
+    resp = httpx.get(url, params=params, timeout=15)
     resp.raise_for_status()
     return resp.json()
 
@@ -206,6 +220,66 @@ def get_opportunity(opportunity_id: int) -> str:
     """
     data = _get(f"/opportunities/{opportunity_id}")
     return _fmt_detail(data)
+
+
+@mcp.tool(
+    annotations={
+        "title": "List Blog Posts",
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": True,
+    }
+)
+def list_blog_posts(limit: int = 10) -> str:
+    """List recent published PainSpotter blog posts — weekly long-form analyses of
+    validated business opportunities (who's hurting, why now, how to build it, plus an
+    indie-hacker checklist). Free; no API key required.
+
+    Args:
+        limit: Number of posts to return, 1-30. Default 10.
+    """
+    data = _get_public(
+        "/api/blog", {"page": 1, "page_size": min(max(limit, 1), 30)}
+    )
+    items = data.get("items", [])
+    if not items:
+        return "No blog posts published yet."
+    lines = [f"{data.get('total', len(items))} published posts, showing {len(items)}:\n"]
+    for p in items:
+        pub = (p.get("published_at") or "")[:10]
+        lines.append(f"- [{pub}] {p['title']}\n  slug: {p['slug']} | {p.get('excerpt', '')}")
+    lines.append("\nUse get_blog_post(slug) for the full article.")
+    return "\n".join(lines)
+
+
+@mcp.tool(
+    annotations={
+        "title": "Get Blog Post",
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": True,
+    }
+)
+def get_blog_post(slug: str) -> str:
+    """Get the full Markdown body of one published blog post by its slug. Free; no API
+    key required. Content is an original AI synthesis with no verbatim community quotes.
+
+    Args:
+        slug: Article slug, taken from list_blog_posts results.
+    """
+    p = _get_public(f"/api/blog/by-slug/{slug}")
+    header = [
+        f"# {p['title']}",
+        f"URL: {API_BASE}/blog/{p['slug']}",
+    ]
+    if p.get("published_at"):
+        header.append(f"Published: {p['published_at'][:10]}")
+    if p.get("tags"):
+        header.append(f"Tags: {', '.join(p['tags'])}")
+    body = p.get("body_md") or p.get("excerpt") or ""
+    return "\n".join(header) + "\n\n" + body
 
 
 # ── 入口 ──────────────────────────────────────────────────────────────────────

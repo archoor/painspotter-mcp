@@ -1,7 +1,7 @@
 [project]
 name = "painspotter-mcp"
-version = "1.0.0"
-description = "PainSpotter MCP Server — query business opportunities in Claude/Cursor"
+version = "1.1.0"
+description = "PainSpotter MCP Server — query business opportunities and blog analyses in Claude/Cursor"
 requires-python = ">=3.11"
 dependencies = [
     "fastmcp>=2.0.0,<3.0.0",

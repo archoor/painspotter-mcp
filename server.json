@@ -1,8 +1,8 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-09-29/server.schema.json",
   "name": "ai.painspotter/painspotter",
-  "description": "AI-analyzed startup opportunities from Reddit, Hacker News & Product Hunt, with commercial scores.",
-  "version": "1.0.0",
+  "description": "AI-analyzed startup opportunities and weekly blog analyses from Reddit, Hacker News & Product Hunt.",
+  "version": "1.1.0",
   "websiteUrl": "https://painspotter.ai",
   "repository": {
     "url": "https://github.com/archoor/painspotter-mcp",
@@ -15,7 +15,7 @@
       "headers": [
         {
           "name": "X-API-Key",
-          "description": "PainSpotter API key (starts with psk_live_). Create one at https://painspotter.ai/account. Free tier can call get_overview and get_opportunity; Pro unlocks all tools.",
+          "description": "PainSpotter API key (starts with psk_live_). Create one at https://painspotter.ai/account. Free tier: get_overview, get_opportunity, list_blog_posts, get_blog_post; Pro unlocks all tools.",
           "isRequired": true,
           "isSecret": true
         }
